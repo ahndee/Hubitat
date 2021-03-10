@@ -40,7 +40,6 @@ metadata {
 preferences {
     input name: 'eagleIP', type: 'string', title:'<b>Eagle IP Address</b>', description: '<div><i>Please use a static IP.</i></div><br>', required: true
     input name: 'reportWatts', type: 'bool', title:'<b>Report Power in Watts?</b>', description: '<div><i>Default reporting is in kW.</i></div><br>', defaultValue: true
-    input name: 'reportWattHours', type: 'bool', title:'<b>Report Energy in WattHours?</b>', description: '<div><i>Default reporting is in kWh.</i></div><br>', defaultValue: true
     input name: 'autoResetEnergy', type: 'enum', title: '<b>Automatically Reset Energy</b>', description: '<div><i>Reset energy on the specified day every month.</i></div></br>', options: daysOptions, defaultValue: 'Disabled'
     input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
     input name: 'secondaryUploadEnabled', type: 'bool', title: '<b>Enable Secondary Uploader?</b>', description: '<div><i>Forward reports to secondary cloud provider.</i></div><br>', defaultValue: false
@@ -141,7 +140,7 @@ void resetEnergy() {
     // reset engery starting point
     state.remove('energyStart')
     state.remove('energyStartTimestamp')
-    sendEvent(name: 'energy', value: 0, unit: reportWattHours ? 'Wh' : 'kWh')
+    sendEvent(name: 'energy', value: 0, unit: 'kWh')
 }
 
 void setNetworkAddress() {
@@ -205,6 +204,7 @@ void parseNetworkInfo(networkInfo) {
 }
 
 void parseCurrentSummation(summation) {
+    logDebug "Adding CurrentSummation…"
     int delivered = convertHexToInt(summation.SummationDelivered.text())
     int received = convertHexToInt(summation.SummationReceived.text())
 
@@ -228,8 +228,8 @@ void parseCurrentSummation(summation) {
     
     if (state.energyStart) {
         // calculate energy
-        def totalEnergy = round2(deliveredValue - state.energyStart)
-        sendEvent(name: 'energy', value: (reportWattHours ? 1000 : 1) * totalEnergy, unit: reportWattHours ? 'Wh' : 'kWh')
+        def totalEnergy = deliveredValue - receivedValue - state.energyStart
+        sendEvent(name: 'energy', value: totalEnergy, unit: 'kWh')
 
         // calculate cost of total energy
         def costEnergy = round2(totalEnergy * (device.currentValue('price') ?: 0))
@@ -237,9 +237,9 @@ void parseCurrentSummation(summation) {
     }
     else {
         // save value
-        state.energyStart = deliveredValue
+        state.energyStart = deliveredValue - receivedValue
         state.energyStartTimestamp = dateString
-        sendEvent(name: 'energy', value: 0, unit: reportWattHours ? 'Wh' : 'kWh')
+        sendEvent(name: 'energy', value: 0, unit: 'kWh')
         sendEvent(name: 'cost', value: 0)
     }
 }
